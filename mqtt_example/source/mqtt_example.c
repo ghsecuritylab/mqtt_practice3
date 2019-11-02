@@ -66,7 +66,7 @@
 /*! @brief MQTT client ID. */
 #define EXAMPLE_MQTT_CLIENT_ID "k64"
 
-#define LOCAL_BROKER
+//#define LOCAL_BROKER
 
 #ifdef LOCAL_BROKER
 /*! @brief MQTT server host name or IP address. */
