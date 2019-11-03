@@ -95,9 +95,9 @@
 #define APP_THREAD_PRIO DEFAULT_THREAD_PRIO
 
 #define MQTT_CONNECTED_EVT		( 1 << 0 )
-#define MQTT_SENSOR_EVT			( 1 << 1 )
-#define MQTT_PARKING_LIGHTS_EVT		( 1 << 2 )
-#define MQTT_VISIT_EVT		( 1 << 3 )
+#define MQTT_PARKING_LIGHTS_EVT		( 1 << 1 )
+#define MQTT_VISIT_EVT		( 1 << 2 )
+#define MQTT_GUESTLEAVING_EVT		( 1 << 3 )
 #define MQTT_DISCONNECTED_EVT	( 1 << 4 )
 
 #define BOARD_LED_GPIO BOARD_LED_RED_GPIO
@@ -112,7 +112,6 @@ static int32_t get_simulated_sensor(int32_t current_value, int32_t max_step,
 		                     int32_t min_value, int32_t max_value,
 							 bool increase);
 static void sensor_timer_callback(TimerHandle_t pxTimer);
-static void publish_humidity(void *ctx);
 static void publish_visit(void *ctx);
 
 
@@ -149,7 +148,6 @@ EventGroupHandle_t xEventGroup;
 
 TimerHandle_t xTimerSensor;
 
-static uint32_t humidity_sensor = 50;
 static uint32_t samples_cnt = 0;
 static bool lights_on;
 static bool lights_published = false;
@@ -201,6 +199,15 @@ static void mqtt_incoming_publish_cb(void *arg, const char *topic, u32_t tot_len
     if(!memcmp(topic, "/acceptance", 11))
     {
     	acceptance_published = true;
+    }
+    if(!memcmp(topic, "/guestleaving", 13))
+    {
+    	xEventGroupSetBits(xEventGroup,	MQTT_GUESTLEAVING_EVT);
+    	lights_on = true;
+    	if(5 > slots)
+    	{
+    		slots++;
+    	}
     }
 }
 
@@ -273,10 +280,10 @@ static void mqtt_incoming_data_cb(void *arg, const u8_t *data, u16_t len, u8_t f
  */
 static void mqtt_subscribe_topics(mqtt_client_t *client)
 {
-    static const char *topics[]={"/lights","/visited:","/acceptance"};
+    static const char *topics[]={"/lights","/visited:","/acceptance","/guestleaving"};
 
 
-    int qos[]                   = {1,1,1};
+    int qos[]                   = {1,1,1,1};
     err_t err;
     int i;
 
@@ -375,23 +382,6 @@ static void mqtt_message_published_cb(void *arg, err_t err)
     }
 }
 
-/*!
- * @brief Publishes a message. To be called on tcpip_thread.
- */
-static void publish_humidity(void *ctx)
-{
-    static const char *topic   = "/humidity";
-    static char message[10];
-
-    LWIP_UNUSED_ARG(ctx);
-
-    memset(message, 0, 10);
-    sprintf(message, "%d", humidity_sensor);
-
-    PRINTF("Going to publish to the topic \"%s\"...\r\n", topic);
-
-    mqtt_publish(mqtt_client, topic, message, strlen(message), 1, 0, mqtt_message_published_cb, (void *)topic);
-}
 
 static void publish_visit(void *ctx)
 {
@@ -498,7 +488,7 @@ static void app_thread(void *arg)
 		// the event group.  Clear the bits before exiting.
 		uxBits = xEventGroupWaitBits(
 					xEventGroup,	// The event group being tested.
-					MQTT_CONNECTED_EVT | MQTT_SENSOR_EVT | MQTT_PARKING_LIGHTS_EVT | MQTT_VISIT_EVT | MQTT_DISCONNECTED_EVT,	// The bits within the event group to wait for.
+					MQTT_CONNECTED_EVT |  MQTT_PARKING_LIGHTS_EVT | MQTT_VISIT_EVT |MQTT_GUESTLEAVING_EVT| MQTT_DISCONNECTED_EVT,	// The bits within the event group to wait for.
 					pdTRUE,			// BIT_0 and BIT_4 should be cleared before returning.
 					pdFALSE,		// Don't wait for both bits, either bit will do.
 					xTicksToWait );	// Wait a maximum of 100ms for either bit to be set.
@@ -509,19 +499,6 @@ static void app_thread(void *arg)
 			PRINTF("MQTT_CONNECTED_EVT.\r\n");
 			//Start the sensor timer
 			xTimerStart(xTimerSensor, 0);
-		}
-		else if(uxBits & MQTT_SENSOR_EVT ) {
-			//PRINTF("MQTT_SENSOR_EVT.\r\n");
-			// Simulate the humidity %, in steps of 5, range is 10% to 100%.
-			// If the sprinkler is On, the humidity will tent to rise.
-			//humidity_sensor = get_simulated_sensor(humidity_sensor, 2, 10, 100, sprinklers_on);
-			if((samples_cnt++%10) == 9){
-				//err = tcpip_callback(publish_humidity, NULL);
-				if (err != ERR_OK)
-				{
-					PRINTF("Failed to invoke publish_humidity on the tcpip_thread: %d.\r\n", err);
-				}
-			}
 		}
 		else if(uxBits & MQTT_PARKING_LIGHTS_EVT )
 		{
@@ -551,6 +528,21 @@ static void app_thread(void *arg)
 				PRINTF("Failed to invoke publish_visit on the tcpip_thread: %d.\r\n", err);
 			}
 
+		}
+		else if(uxBits & MQTT_GUESTLEAVING_EVT )
+		{
+			PRINTF("MQTT_PARKING_LIGHTS_EVT.\r\n");
+			if(lights_on){
+				GPIO_PortClear(BOARD_LED_GPIO, 1u << BOARD_LED_GPIO_PIN);
+			}
+			else {
+				GPIO_PortSet(BOARD_LED_GPIO, 1u << BOARD_LED_GPIO_PIN);
+			}
+			err = tcpip_callback(publish_visit, NULL);
+			if (err != ERR_OK)
+			{
+				PRINTF("Failed to invoke publish_visit on the tcpip_thread: %d.\r\n", err);
+			}
 		}
 		else if(uxBits & MQTT_DISCONNECTED_EVT ) {
 			PRINTF("MQTT_DISCONNECTED_EVT.\r\n");
@@ -652,7 +644,7 @@ int32_t get_simulated_sensor(int32_t current_value, int32_t max_step, int32_t mi
 
 void sensor_timer_callback( TimerHandle_t pxTimer )
 {
-	xEventGroupSetBits(xEventGroup,	MQTT_SENSOR_EVT);
+	//xEventGroupSetBits(xEventGroup,	MQTT_SENSOR_EVT);
 }
 
 #endif
