@@ -147,9 +147,10 @@ EventGroupHandle_t xEventGroup;
 
 TimerHandle_t xTimerSensor;
 
-uint32_t humidity_sensor = 50;
-uint32_t samples_cnt = 0;
-bool sprinklers_on;
+static uint32_t humidity_sensor = 50;
+static uint32_t samples_cnt = 0;
+static bool lights_on;
+static bool lights_published = false;
 
 
 /*******************************************************************************
@@ -182,6 +183,10 @@ static void mqtt_incoming_publish_cb(void *arg, const char *topic, u32_t tot_len
 
     PRINTF("Received %u bytes from the topic \"%s\": \"", tot_len, topic);
 
+    if(!memcmp(topic, "/lights", 7))
+    {
+    	lights_published = true;
+    }
 }
 
 /*!
@@ -204,15 +209,21 @@ static void mqtt_incoming_data_cb(void *arg, const u8_t *data, u16_t len, u8_t f
             PRINTF("\\x%02x", data[i]);
         }
     }
+    if(true == lights_published)
+    {
+        if(!memcmp(data, "On", 2))
+        {
+        	lights_on = true;
+        	xEventGroupSetBits(xEventGroup,	MQTT_PARKING_LIGHTS_EVT);
+        }
+        else if(!memcmp(data, "Off", 3))
+        {
+        	lights_on = false;
+        	xEventGroupSetBits(xEventGroup,	MQTT_PARKING_LIGHTS_EVT);
+        }
+        lights_published = false;
+    }
 
-    if(!memcmp(data, "On", 2)) {
-    	sprinklers_on = true;
-    	xEventGroupSetBits(xEventGroup,	MQTT_PARKING_LIGHTS_EVT);
-    }
-    else if(!memcmp(data, "Off", 3)) {
-    	sprinklers_on = false;
-    	xEventGroupSetBits(xEventGroup,	MQTT_PARKING_LIGHTS_EVT);
-    }
 
     if (flags & MQTT_DATA_FLAG_LAST)
     {
@@ -449,7 +460,7 @@ static void app_thread(void *arg)
 			//PRINTF("MQTT_SENSOR_EVT.\r\n");
 			// Simulate the humidity %, in steps of 5, range is 10% to 100%.
 			// If the sprinkler is On, the humidity will tent to rise.
-			humidity_sensor = get_simulated_sensor(humidity_sensor, 2, 10, 100, sprinklers_on);
+			//humidity_sensor = get_simulated_sensor(humidity_sensor, 2, 10, 100, sprinklers_on);
 			if((samples_cnt++%10) == 9){
 				//err = tcpip_callback(publish_humidity, NULL);
 				if (err != ERR_OK)
@@ -460,7 +471,7 @@ static void app_thread(void *arg)
 		}
 		else if(uxBits & MQTT_PARKING_LIGHTS_EVT ) {
 			PRINTF("MQTT_PARKING_LIGHTS_EVT.\r\n");
-			if(sprinklers_on){
+			if(lights_on){
 				GPIO_PortClear(BOARD_LED_GPIO, 1u << BOARD_LED_GPIO_PIN);
 			}
 			else {
