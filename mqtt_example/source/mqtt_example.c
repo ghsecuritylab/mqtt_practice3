@@ -66,7 +66,7 @@
 /*! @brief MQTT client ID. */
 #define EXAMPLE_MQTT_CLIENT_ID "k64"
 
-#define LOCAL_BROKER
+//#define LOCAL_BROKER
 
 #ifdef LOCAL_BROKER
 /*! @brief MQTT server host name or IP address. */
@@ -79,13 +79,13 @@
 #define EXAMPLE_MQTT_SERVER_PORT 1883
 #else
 /*! @brief MQTT server host name or IP address. */
-#define EXAMPLE_MQTT_SERVER_HOST "postman.cloudmqtt.com"
+#define EXAMPLE_MQTT_SERVER_HOST "m12.cloudmqtt.com"
 
-#define EXAMPLE_MQTT_USER "nico"
-#define EXAMPLE_MQTT_PSWD "remi"
+#define EXAMPLE_MQTT_USER "USER1"
+#define EXAMPLE_MQTT_PSWD "USER1"
 
 /*! @brief MQTT server port number. */
-#define EXAMPLE_MQTT_SERVER_PORT 13862
+#define EXAMPLE_MQTT_SERVER_PORT 14042
 #endif
 
 /*! @brief Stack size of the temporary lwIP initialization thread. */
