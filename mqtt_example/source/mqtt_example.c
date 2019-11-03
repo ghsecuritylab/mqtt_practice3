@@ -96,7 +96,7 @@
 
 #define MQTT_CONNECTED_EVT		( 1 << 0 )
 #define MQTT_SENSOR_EVT			( 1 << 1 )
-#define MQTT_SPRINKLERS_EVT		( 1 << 2 )
+#define MQTT_PARKING_LIGHTS_EVT		( 1 << 2 )
 #define MQTT_DISCONNECTED_EVT	( 1 << 3 )
 
 #define BOARD_LED_GPIO BOARD_LED_RED_GPIO
@@ -207,11 +207,11 @@ static void mqtt_incoming_data_cb(void *arg, const u8_t *data, u16_t len, u8_t f
 
     if(!memcmp(data, "On", 2)) {
     	sprinklers_on = true;
-    	xEventGroupSetBits(xEventGroup,	MQTT_SPRINKLERS_EVT);
+    	xEventGroupSetBits(xEventGroup,	MQTT_PARKING_LIGHTS_EVT);
     }
     else if(!memcmp(data, "Off", 3)) {
     	sprinklers_on = false;
-    	xEventGroupSetBits(xEventGroup,	MQTT_SPRINKLERS_EVT);
+    	xEventGroupSetBits(xEventGroup,	MQTT_PARKING_LIGHTS_EVT);
     }
 
     if (flags & MQTT_DATA_FLAG_LAST)
@@ -225,7 +225,7 @@ static void mqtt_incoming_data_cb(void *arg, const u8_t *data, u16_t len, u8_t f
  */
 static void mqtt_subscribe_topics(mqtt_client_t *client)
 {
-    static const char *topics[] = {"/sprinkler"};
+    static const char *topics[] = {"/lights"};
     int qos[]                   = {1};
     err_t err;
     int i;
@@ -433,7 +433,7 @@ static void app_thread(void *arg)
 		// the event group.  Clear the bits before exiting.
 		uxBits = xEventGroupWaitBits(
 					xEventGroup,	// The event group being tested.
-					MQTT_CONNECTED_EVT | MQTT_SENSOR_EVT | MQTT_SPRINKLERS_EVT | MQTT_DISCONNECTED_EVT,	// The bits within the event group to wait for.
+					MQTT_CONNECTED_EVT | MQTT_SENSOR_EVT | MQTT_PARKING_LIGHTS_EVT | MQTT_DISCONNECTED_EVT,	// The bits within the event group to wait for.
 					pdTRUE,			// BIT_0 and BIT_4 should be cleared before returning.
 					pdFALSE,		// Don't wait for both bits, either bit will do.
 					xTicksToWait );	// Wait a maximum of 100ms for either bit to be set.
@@ -446,20 +446,20 @@ static void app_thread(void *arg)
 			xTimerStart(xTimerSensor, 0);
 		}
 		else if(uxBits & MQTT_SENSOR_EVT ) {
-			PRINTF("MQTT_SENSOR_EVT.\r\n");
+			//PRINTF("MQTT_SENSOR_EVT.\r\n");
 			// Simulate the humidity %, in steps of 5, range is 10% to 100%.
 			// If the sprinkler is On, the humidity will tent to rise.
 			humidity_sensor = get_simulated_sensor(humidity_sensor, 2, 10, 100, sprinklers_on);
 			if((samples_cnt++%10) == 9){
-				err = tcpip_callback(publish_humidity, NULL);
+				//err = tcpip_callback(publish_humidity, NULL);
 				if (err != ERR_OK)
 				{
 					PRINTF("Failed to invoke publish_humidity on the tcpip_thread: %d.\r\n", err);
 				}
 			}
 		}
-		else if(uxBits & MQTT_SPRINKLERS_EVT ) {
-			PRINTF("MQTT_SPRINKLERS_EVT.\r\n");
+		else if(uxBits & MQTT_PARKING_LIGHTS_EVT ) {
+			PRINTF("MQTT_PARKING_LIGHTS_EVT.\r\n");
 			if(sprinklers_on){
 				GPIO_PortClear(BOARD_LED_GPIO, 1u << BOARD_LED_GPIO_PIN);
 			}
