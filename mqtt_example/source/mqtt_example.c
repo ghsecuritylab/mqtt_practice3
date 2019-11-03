@@ -236,6 +236,22 @@ static void mqtt_incoming_data_cb(void *arg, const u8_t *data, u16_t len, u8_t f
         }
         lights_published = false;
     }
+    if((true == visited_published) && ((true == acceptance_published)))
+    {
+        if(!memcmp(data, "Y", 1))
+        {
+        	lights_on = true;
+        	xEventGroupSetBits(xEventGroup,	MQTT_PARKING_LIGHTS_EVT);
+        }
+        else
+        {
+        	lights_on = false;
+        	xEventGroupSetBits(xEventGroup,	MQTT_PARKING_LIGHTS_EVT);
+        }
+        lights_published = false;
+        visited_published = false;
+        acceptance_published = false;
+    }
 
 
     if (flags & MQTT_DATA_FLAG_LAST)
