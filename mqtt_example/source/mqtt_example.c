@@ -151,6 +151,8 @@ static uint32_t humidity_sensor = 50;
 static uint32_t samples_cnt = 0;
 static bool lights_on;
 static bool lights_published = false;
+static bool visited_published = false;
+static bool acceptance_published = false;
 static slots = 5;
 
 
@@ -189,6 +191,14 @@ static void mqtt_incoming_publish_cb(void *arg, const char *topic, u32_t tot_len
     if(!memcmp(topic, "/lights", 7))
     {
     	lights_published = true;
+    }
+    if(!memcmp(topic, "/visited:", 9))
+    {
+    	visited_published = true;
+    }
+    if(!memcmp(topic, "/acceptance", 11))
+    {
+    	acceptance_published = true;
     }
 }
 
