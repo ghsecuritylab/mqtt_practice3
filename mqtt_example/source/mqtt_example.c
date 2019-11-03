@@ -151,6 +151,9 @@ static uint32_t humidity_sensor = 50;
 static uint32_t samples_cnt = 0;
 static bool lights_on;
 static bool lights_published = false;
+static slots = 5;
+
+
 
 
 /*******************************************************************************
@@ -236,8 +239,10 @@ static void mqtt_incoming_data_cb(void *arg, const u8_t *data, u16_t len, u8_t f
  */
 static void mqtt_subscribe_topics(mqtt_client_t *client)
 {
-    static const char *topics[] = {"/lights"};
-    int qos[]                   = {1};
+    static const char *topics[]={"/lights","/visited:","/acceptance"};
+
+
+    int qos[]                   = {1,1,1};
     err_t err;
     int i;
 
