@@ -97,7 +97,8 @@
 #define MQTT_CONNECTED_EVT		( 1 << 0 )
 #define MQTT_SENSOR_EVT			( 1 << 1 )
 #define MQTT_PARKING_LIGHTS_EVT		( 1 << 2 )
-#define MQTT_DISCONNECTED_EVT	( 1 << 3 )
+#define MQTT_VISIT_EVT		( 1 << 3 )
+#define MQTT_DISCONNECTED_EVT	( 1 << 4 )
 
 #define BOARD_LED_GPIO BOARD_LED_RED_GPIO
 #define BOARD_LED_GPIO_PIN BOARD_LED_RED_GPIO_PIN
@@ -112,6 +113,7 @@ static int32_t get_simulated_sensor(int32_t current_value, int32_t max_step,
 							 bool increase);
 static void sensor_timer_callback(TimerHandle_t pxTimer);
 static void publish_humidity(void *ctx);
+static void publish_visit(void *ctx);
 
 
 /*******************************************************************************
@@ -240,17 +242,23 @@ static void mqtt_incoming_data_cb(void *arg, const u8_t *data, u16_t len, u8_t f
     {
         if(!memcmp(data, "Y", 1))
         {
-        	lights_on = true;
-        	xEventGroupSetBits(xEventGroup,	MQTT_PARKING_LIGHTS_EVT);
+        	xEventGroupSetBits(xEventGroup,	MQTT_VISIT_EVT);
+            acceptance_published = false;
+            lights_published = false;
+            if(0 < slots)
+            {
+            	slots--;
+            	lights_on = true;
+            }
         }
         else
         {
-        	lights_on = false;
-        	xEventGroupSetBits(xEventGroup,	MQTT_PARKING_LIGHTS_EVT);
+        	xEventGroupSetBits(xEventGroup,	MQTT_VISIT_EVT);
+            visited_published = false;
+            acceptance_published = false;
+            lights_published = false;
+            lights_on = false;
         }
-        lights_published = false;
-        visited_published = false;
-        acceptance_published = false;
     }
 
 
@@ -385,6 +393,21 @@ static void publish_humidity(void *ctx)
     mqtt_publish(mqtt_client, topic, message, strlen(message), 1, 0, mqtt_message_published_cb, (void *)topic);
 }
 
+static void publish_visit(void *ctx)
+{
+    static const char *topic   = "/slots";
+    static char message[10];
+
+    LWIP_UNUSED_ARG(ctx);
+
+    memset(message, 0, 10);
+    sprintf(message, "%d", slots);
+
+    PRINTF("Going to publish to the topic \"%s\"...\r\n", topic);
+
+    mqtt_publish(mqtt_client, topic, message, strlen(message), 1, 0, mqtt_message_published_cb, (void *)topic);
+}
+
 /*!
  * @brief Application thread.
  */
@@ -475,7 +498,7 @@ static void app_thread(void *arg)
 		// the event group.  Clear the bits before exiting.
 		uxBits = xEventGroupWaitBits(
 					xEventGroup,	// The event group being tested.
-					MQTT_CONNECTED_EVT | MQTT_SENSOR_EVT | MQTT_PARKING_LIGHTS_EVT | MQTT_DISCONNECTED_EVT,	// The bits within the event group to wait for.
+					MQTT_CONNECTED_EVT | MQTT_SENSOR_EVT | MQTT_PARKING_LIGHTS_EVT | MQTT_VISIT_EVT | MQTT_DISCONNECTED_EVT,	// The bits within the event group to wait for.
 					pdTRUE,			// BIT_0 and BIT_4 should be cleared before returning.
 					pdFALSE,		// Don't wait for both bits, either bit will do.
 					xTicksToWait );	// Wait a maximum of 100ms for either bit to be set.
@@ -500,7 +523,8 @@ static void app_thread(void *arg)
 				}
 			}
 		}
-		else if(uxBits & MQTT_PARKING_LIGHTS_EVT ) {
+		else if(uxBits & MQTT_PARKING_LIGHTS_EVT )
+		{
 			PRINTF("MQTT_PARKING_LIGHTS_EVT.\r\n");
 			if(lights_on){
 				GPIO_PortClear(BOARD_LED_GPIO, 1u << BOARD_LED_GPIO_PIN);
@@ -508,6 +532,25 @@ static void app_thread(void *arg)
 			else {
 				GPIO_PortSet(BOARD_LED_GPIO, 1u << BOARD_LED_GPIO_PIN);
 			}
+		}
+		else if(uxBits & MQTT_VISIT_EVT )
+		{
+			PRINTF("MQTT_PARKING_LIGHTS_EVT.\r\n");
+			if(lights_on)
+			{
+				GPIO_PortClear(BOARD_LED_GPIO, 1u << BOARD_LED_GPIO_PIN);
+			}
+			else
+			{
+				GPIO_PortSet(BOARD_LED_GPIO, 1u << BOARD_LED_GPIO_PIN);
+			}
+
+			err = tcpip_callback(publish_visit, NULL);
+			if (err != ERR_OK)
+			{
+				PRINTF("Failed to invoke publish_visit on the tcpip_thread: %d.\r\n", err);
+			}
+
 		}
 		else if(uxBits & MQTT_DISCONNECTED_EVT ) {
 			PRINTF("MQTT_DISCONNECTED_EVT.\r\n");
